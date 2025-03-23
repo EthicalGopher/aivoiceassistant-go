@@ -56,7 +56,7 @@ func StartServer() *fiber.App {
 		
 		return c.SendFile(result)
 	})
-	app.Static("/","./temp")
+	
 	go func() {
 		if err := app.Listen(":8089"); err != nil {
 			log.Fatalf("Server error: %v", err)
