@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	// "os/exec"
 	"time"
 	"github.com/EthicalGopher/rag/tts"
 
@@ -28,7 +28,7 @@ func Filepath(c *fiber.Ctx) string {
 	return filepath
 }
 
-func StartServer() *fiber.App {
+func StartServer()  {
 	app := fiber.New()
 
 	app.Use(cors.New(cors.Config{
@@ -58,33 +58,34 @@ func StartServer() *fiber.App {
 		}
 	}()
 
-	return app
+	// return app
 }
 
 func main() {
-	for {
-		app := StartServer()
-
-		// Wait for 1 minute (adjust to 1 hour for production)
-		time.Sleep(1 * time.Minute)
-
-		// Gracefully shut down the server first
-		fmt.Println("Shutting down server...")
-		if err := app.Shutdown(); err != nil {
-			log.Fatalf("Server shutdown error: %v", err)
-		}
-
-		// Clean up the "temp" directory after shutdown
-		fmt.Println("Cleaning up temp directory...")
-		err := deleteTempWithRetry("temp", 3, 2*time.Second)
+	err := deleteTempWithRetry("temp", 3, 2*time.Second)
 		if err != nil {
 			fmt.Println("Failed to clean up temp directory:", err)
 		}
+		fmt.Println("Cleaning up temp directory...")
+		fmt.Println("Restarting...")
+	
+		 StartServer()
+
+		// Wait for 1 minute (adjust to 1 hour for production)
+		// time.Sleep(1 * time.Minute)
+
+		// // Gracefully shut down the server first
+		// fmt.Println("Shutting down server...")
+		// if err := app.Shutdown(); err != nil {
+		// 	log.Fatalf("Server shutdown error: %v", err)
+		// }
+
+		// Clean up the "temp" directory after shutdown
+		
 
 		// Restart the program
-		fmt.Println("Restarting...")
-		restartProgram()
-	}
+		// restartProgram()
+	
 }
 
 // Delete the temp directory with retry logic
@@ -102,16 +103,16 @@ func deleteTempWithRetry(dir string, maxRetries int, delay time.Duration) error 
 }
 
 // Restart the program
-func restartProgram() {
-	executable, err := os.Executable()
-	if err != nil {
-		log.Fatalf("Failed to get executable path: %v", err)
-	}
-	cmd := exec.Command(executable, os.Args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		log.Fatalf("Failed to restart program: %v", err)
-	}
-	os.Exit(0)
-}
+// func restartProgram() {
+// 	executable, err := os.Executable()
+// 	if err != nil {
+// 		log.Fatalf("Failed to get executable path: %v", err)
+// 	}
+// 	cmd := exec.Command(executable, os.Args[1:]...)
+// 	cmd.Stdout = os.Stdout
+// 	cmd.Stderr = os.Stderr
+// 	if err := cmd.Start(); err != nil {
+// 		log.Fatalf("Failed to restart program: %v", err)
+// 	}
+// 	os.Exit(0)
+// }
