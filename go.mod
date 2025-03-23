@@ -3,7 +3,7 @@ module voice
 go 1.24.1
 
 require (
-	github.com/EthicalGopher/rag v0.0.0-20250321185443-aa8d3da7e7cd
+	github.com/EthicalGopher/rag v0.0.0-20250323060418-cd10e0c12e16
 	github.com/gofiber/fiber/v2 v2.52.6
 )
 
@@ -21,5 +21,5 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )

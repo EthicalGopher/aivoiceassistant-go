@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"time"
 	"github.com/EthicalGopher/rag/tts"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/session"
@@ -41,7 +42,7 @@ func StartServer() *fiber.App {
 		}
 		folderpath := "temp"
 		filepathArg := Filepath(c)
-
+	
 		result, err := tts.TTS(input, folderpath, filepathArg)
 		if err != nil {
 			fmt.Println("TTS error:", err)
@@ -114,4 +115,3 @@ func restartProgram() {
 	}
 	os.Exit(0)
 }
-
