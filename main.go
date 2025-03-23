@@ -53,10 +53,10 @@ func StartServer() *fiber.App {
 			fmt.Println("TTS error:", err)
 		}
 		fmt.Println(result)
-
+		
 		return c.SendFile(result)
 	})
-
+	app.Static("/","./temp")
 	go func() {
 		if err := app.Listen(":8089"); err != nil {
 			log.Fatalf("Server error: %v", err)
