@@ -1,14 +1,13 @@
+
 package main
 
 import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"time"
 
-
-	"github.com/google/uuid"
 	htgotts "github.com/hegedustibor/htgo-tts"
 	"github.com/hegedustibor/htgo-tts/handlers"
 	"github.com/hegedustibor/htgo-tts/voices"
@@ -23,123 +22,31 @@ var store = session.New()
 func Filepath(c *fiber.Ctx) string {
 	sess, err := store.Get(c)
 	if err != nil {
-		fmt.Println("Session error:", err)
 		return "default"
 	}
-	filepath := sess.ID()
-	if err := sess.Save(); err != nil {
-		fmt.Println("Failed to save session:", err)
+	// Ensure session exists and is valid
+	if sess.Fresh() {
+		if err := sess.Save(); err != nil {
+			return "default"
+		}
 	}
-	return filepath
+	return sess.ID()
 }
 
-func StartServer() *fiber.App {
-	app := fiber.New()
+func TTS(input, dir, sessionID string) (string, error) {
+	filename := fmt.Sprintf("speech_%s", sessionID)
+	fullPath := filepath.Join(dir, filename+".mp3")
 
-	app.Use(cors.New(cors.Config{
-		AllowMethods: "POST,GET,DELETE",
-	}))
-
-	app.Get("/", func(c *fiber.Ctx) error {
-		input := c.Query("input")
-		if input == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("Missing 'input' query parameter")
-		}
-		folderpath := "temp"
-		filepathArg := Filepath(c)
-	
-		result, err := TTS(input, folderpath, filepathArg)
-		if err != nil {
-			fmt.Println("TTS error:", err)
-		}
-		fmt.Println(result)
-		
-		return c.SendFile(result)
-	})
-	
-	go func() {
-		if err := app.Listen(":8089"); err != nil {
-			log.Fatalf("Server error: %v", err)
-		}
-	}()
-
-	return app
-}
-
-func main() {
-	for {
-		app := StartServer()
-
-		// Wait for 1 minute (adjust to 1 hour for production)
-		time.Sleep(1 * time.Minute)
-
-		// Gracefully shut down the server first
-		fmt.Println("Shutting down server...")
-		if err := app.Shutdown(); err != nil {
-			log.Fatalf("Server shutdown error: %v", err)
-		}
-
-		// Clean up the "temp" directory after shutdown
-		fmt.Println("Cleaning up temp directory...")
-		err := deleteTempWithRetry("temp", 3, 2*time.Second)
-		if err != nil {
-			fmt.Println("Failed to clean up temp directory:", err)
-		}
-
-		// Restart the program
-		fmt.Println("Restarting...")
-		restartProgram()
-	}
-}
-
-// Delete the temp directory with retry logic
-func deleteTempWithRetry(dir string, maxRetries int, delay time.Duration) error {
-	var err error
-	for i := 0; i < maxRetries; i++ {
-		err = os.RemoveAll(dir)
-		if err == nil {
-			return nil
-		}
-		fmt.Printf("Retry %d: Failed to delete %s: %v\n", i+1, dir, err)
-		time.Sleep(delay)
-	}
-	return fmt.Errorf("failed to delete %s after %d retries: %v", dir, maxRetries, err)
-}
-
-// Restart the program
-func restartProgram() {
-	executable, err := os.Executable()
-	if err != nil {
-		log.Fatalf("Failed to get executable path: %v", err)
-	}
-	cmd := exec.Command(executable, os.Args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		log.Fatalf("Failed to restart program: %v", err)
-	}
-	os.Exit(0)
-}
-
-
-
-
-var Path string
-func TTS(input, dir,filepath string) (string, error) {
-	// Generate unique filename
-	uuid := uuid.New().String()
-	filename := fmt.Sprintf("%s+%s",uuid,filepath)
-	fullPath:=dir+`\`+filename+`.mp3`
-	
-
-	
-	// Ensure directory exists
+	// Create temp directory if it doesn't exist
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("directory creation failed: %w", err)
 	}
-	
-	
-	// Generate speech file
+
+	// Delete the existing file for this session if it exists
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to remove existing file: %w", err)
+	}
+
 	speech := htgotts.Speech{
 		Folder:   dir,
 		Language: voices.English,
@@ -149,7 +56,67 @@ func TTS(input, dir,filepath string) (string, error) {
 	if _, err := speech.CreateSpeechFile(input, filename); err != nil {
 		return "", fmt.Errorf("speech generation failed: %w", err)
 	}
-	Path=fullPath
-	
+
 	return fullPath, nil
+}
+
+func cleanupOldFiles() {
+	for {
+		time.Sleep(1 * time.Minute)
+		files, err := os.ReadDir("temp")
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			if filepath.Ext(file.Name()) != ".mp3" {
+				continue
+			}
+
+			fullPath := filepath.Join("temp", file.Name())
+			info, err := os.Stat(fullPath)
+			if err != nil {
+				continue
+			}
+
+			if time.Since(info.ModTime()) > 5*time.Minute {
+				os.Remove(fullPath)
+			}
+		}
+	}
+}
+
+func main() {
+	go cleanupOldFiles()
+	app := fiber.New()
+
+	app.Use(cors.New(cors.Config{
+		AllowMethods: "GET",
+	}))
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		input := c.Query("input")
+		if input == "" {
+			return c.Status(fiber.StatusBadRequest).SendString("Missing 'input' query parameter")
+		}
+
+		filepath := Filepath(c)
+		result, err := TTS(input, "temp", filepath)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		}
+
+		data, err := os.ReadFile(result)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString("Error reading file")
+		}
+
+		c.Set("Content-Type", "audio/mpeg")
+		c.Set("Accept-Ranges", "bytes")
+		c.Set("Access-Control-Allow-Origin", "*")
+
+		return c.Send(data)
+	})
+
+	log.Fatal(app.Listen("0.0.0.0:8089"))
 }
